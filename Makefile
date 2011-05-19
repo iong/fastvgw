@@ -4,7 +4,7 @@ ifeq "$(VPATH)" ""
     VPATH:=.
 endif
 
-#DBG=1
+DBG=1
 COMPILER:=intel
 
 OS=$(shell uname -s)
@@ -23,6 +23,7 @@ endif
 LIBS:= $(LIBS) $(LAPACK)
 
 
+dimer:=utils.f90 propagation.f90 vgw.f90 vgwfm.f90 dlsode.f vgwspb_H2_4G_Rc_Q_tau_SqrtMeff_Mar03.f dimer.f90
 gibbs3:=utils.f90 pairint.f90 gibbs3.f90
 gibbs4:=gibbs4.f90
 gibbs3h:=gibbs3h.f90
@@ -31,7 +32,7 @@ objects=$(addsuffix .o,$(basename $(1)))
 
 
 #all: $(addsuffix $(EXT),gibbs4 gibbs3h gibbs3)
-all: qgibbs
+all: dimer
 
 ifneq ($(wildcard $(VPATH)/deps.mk),)
 include $(VPATH)/deps.mk
@@ -64,10 +65,14 @@ gibbs3$(EXT): $(call objects,$(gibbs3))
 qgibbs: $(call objects,$(qgibbs))
 	$(FC) $(LDFLAGS) $(OPTFLAGS) -o $@ $^ $(LIBS)
 
+dimer: $(call objects,$(dimer))
+	$(FC) $(LDFLAGS) $(OPTFLAGS) -o $@ $^ $(LIBS) -mkl=sequential
+
 gibbs4.ps: $(gibbs4)
 	a2ps -1 --borders=no -f 10 -o $@ $^
 
 vgw.f90: vgw0.f90 rhss0.f90 interaction_lists.f90 potential_energy.f90
+vgwfm.f90: vgw0fm.f90 rhssfm.f90
 
 clean:
 	$(RM) *.o *.mod *.mod.F90 *.opari.inc opari.rc opari.tab.c *.mod.F

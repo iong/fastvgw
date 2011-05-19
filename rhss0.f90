@@ -1,18 +1,25 @@
-SUBROUTINE RHSS0(DT, mm)
+SUBROUTINE RHSS0(NEQ, DT, y, yp)
     use omp_lib
     IMPLICIT NONE
+    integer, intent(in) :: NEQ
     REAL*8, intent(in) :: DT
-    logical, intent(in) :: mm
-    INTEGER :: J,I1,I2,IG, NN1
+    REAL*8, intent(inout) :: y(NEQ)
+    REAL*8, intent(out) :: yp(NEQ)
+    INTEGER I, J,I1,I2,IG,CNT,CNT2, NN1
     REAL*8 AG(3,3),GU(3,3), &
             DETA,DETAG,GUG(3,3),UX(3,nnbmax),UXX(3,3, nnbmax),QZQ,EXPAV, &
-            G12(3,3),A(3,3), &
-            Zq(3), Z(3,3),Q12(3), v0, QP_(3)
-    real*8 :: GC(3,3,nnbmax), &
-            QC(3, nnbmax), UXX0(3,3), UX0(3), UPV_I1(3), UPM_I1(3,3)
-    real*8 :: UPV_local(3,thread_start:thread_stop), &
-            UPM_local(3,3,thread_start:thread_stop), Ulocal
+            BL2, G12(3,3),A(3,3), &
+            Zq(3), Z(3,3),Q12(3), v0
+    real*8 :: Q(3,Natom), G(3,3,Natom), GC(3,3,nnbmax), QC(3, nnbmax), UXX0(3,3), UX0(3), UPV_I1(3), UPM_I1(3,3)
+    real*8 :: UPV_local(3,thread_start:thread_stop), UPM_local(3,3,thread_start:thread_stop), Ulocal
 
+    if (NEQ /= (1+9*Natom) ) then
+        write (*,*) 'NEQ != 1+9*Natom', NEQ, 1+9*Natom
+        stop
+    endif
+
+    Q = reshape(y(2:1+3*Natom), (/3, Natom/) )
+    call unpack_g(y, G)
     UPM(:,:,:,tid) = 0d0
     UPV(:,:,tid) = 0d0
     Ulocal = 0d0
@@ -27,8 +34,7 @@ SUBROUTINE RHSS0(DT, mm)
         qc(:,1:NN1) = q(:,nbidx(1:NN1,I1))
         GC(:,:,1:NN1) = G(:,:,nbidx(1:NN1,I1))
         DO I2=1,NN1
-            Q12 = Q(:,I1) - QC(:,I2)
-            Q12 = min_image(Q12, bl)
+            Q12 = min_image(Q(:,I1) - QC(:,I2), bl)
             G12=G(:,:,I1)+GC(:,:,I2)
 
             call detminvm(G12, DETA, A)
@@ -76,38 +82,33 @@ SUBROUTINE RHSS0(DT, mm)
 
     UPV_local(:,thread_start:thread_stop) = UPV(:,thread_start:thread_stop,0)
     UPM_local(:,:,thread_start:thread_stop) = UPM(:,:,thread_start:thread_stop,0)
-    do i1=1,nthr-1
+    do i1=1,nthreads-1
         UPV_local(:,thread_start:thread_stop) = UPV_local(:,thread_start:thread_stop) + UPV(:,thread_start:thread_stop,i1)
         UPM_local(:,:,thread_start:thread_stop) = UPM_local(:,:,thread_start:thread_stop) + UPM(:,:,thread_start:thread_stop,i1)
     end do
     TRUXXG(tid) = sum(UPM_local*G(:,:,thread_start:thread_stop))
-    U(tid) = Ulocal   
+    U(tid) = Ulocal
     do i1=thread_start,thread_stop
-        QP_ = - matmul(G(:,:,I1), UPV_local(:,I1))
+        cnt = 3*(i1-1)+2
+        cnt2 = 2 + 6*(i1-1) + 3*Natom
+
+        yp(CNT:CNT+2) = - matmul(G(:,:,I1), UPV_local(:,I1))
 
         GU = matmul(G(:,:,I1), UPM_local(:,:,I1))
         GUG = -matmul(GU, G(:,:,I1))
         do J=1,3
             GUG(J,J) = GUG(J,J) + invmass
         end do
-        
-        
-        Q(:,I1) = Q(:,I1) + DT * QP_
-        QP(:,I1) = QP_
-        
-        GP(:,:,I1) = GUG
-        G(:,:,I1) = G(:,:,I1) + DT*GUG
-        
-        if (mm) then
-            gamak(:, I1) = gamak(:, I1) - DT * matmul(transpose(Qnk(:,:,i1)), UPV_local(:,I1))
-
-    	    Qnk(:,:,I1) = Qnk(:,:,I1) - DT * matmul(GU, Qnk(:,:,i1))
-	    end if
-    end do
+        yp(cnt2  :cnt2+2) = GUG(:,1)
+        yp(cnt2+3:cnt2+4) = GUG(2:3,2)
+        yp(cnt2+5) = GUG(3,3)
+        y(CNT:CNT+2) = y(CNT:CNT+2) + DT*yp(CNT:CNT+2)
+        y(CNT2:CNT2+5) = y(CNT2:CNT2+5) + DT*yp(CNT2:CNT2+5)
+    ENDDO
 
 !$OMP BARRIER
 !$OMP MASTER
-    gamap = -0.25d0 * sum(TRUXXG(0:nthr-1)) - sum(U(0:nthr-1))
-    gama = gama + DT * gamap
+            yp(1) = -0.25d0 * sum(TRUXXG) - sum(U)
+            y(1) = y(1)  + yp(1) *DT
 !$OMP END MASTER
 END SUBROUTINE RHSS0

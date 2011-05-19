@@ -1,4 +1,5 @@
 subroutine interaction_lists(Q)
+    use utils
     implicit none
     real*8, intent(in) :: Q(:,:)
     integer :: N,I,J, NN
@@ -11,8 +12,8 @@ subroutine interaction_lists(Q)
     do I=1,N-1
         NN = 0
         do J=I+1,N
-            qij=Q(:,I)-Q(:,J)
-            rsq = sum(min_image(qij, BL)**2)
+            qij=min_image(Q(:,I)-Q(:,J), bl)
+            rsq = sum(qij**2)
             if(rsq <= rc2) then
                 NN = NN + 1
                 NBIDX(NN, I) = J
@@ -21,6 +22,6 @@ subroutine interaction_lists(Q)
         NNB(i) = NN
     enddo
 !$OMP END DO
-    nnbmax = maxval(nnb)
+	nnbmax = maxval(nnb)
 end subroutine interaction_lists
 
