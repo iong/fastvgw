@@ -3,7 +3,7 @@ program qgibbs
     use utils, only: min_image, replace_char
     implicit none
     real*8, parameter :: M_PI = 3.141592653d0
-    real*8 :: rhcore
+    real*8 :: rhcore, rcorrmax = 7.0
     real*8 :: Vtot, V(2), bl(2), kT, beta, U0(4), xstep(2), Vstep
     real*8 :: Z, Um(2), Vm(2), Nm(2), pm(2), rho0(2), rhom(2), mum(2)
     real*8, allocatable :: rs(:,:, :), mcblock(:,:)
@@ -82,7 +82,9 @@ program qgibbs
 
     rhcore = 2.85
 
+    
     call vgwinit(Ntot, 'pH2-4g')
+    call init_fmcorr(1d0/kT)
     U0 = total_energy(bl)
 
     do imc=1,Nequil
@@ -319,25 +321,28 @@ function total_energy(bln, ibox) result(utot)
     implicit none
     real*8, intent(in) :: bln(2)
     integer, intent(in), optional :: ibox
-    real*8 :: utot(4), fx(3, Ntot)
+    real*8 :: utot(4), fx(3, Ntot), fmcorr
     
     if (present(ibox)) then
         Utot = U0
         
         call vgw0v(rs(:,1:N(ibox),ibox)*bln(ibox), bln(ibox), (/ beta /), &
-            0d0, Utot(ibox:ibox), fx(:,1:N(ibox)) )
+            0d0, Utot(ibox:ibox), fx(:,1:N(ibox)), FullMatrixCorrection=fmcorr)
             
+        Utot(ibox) = Utot(ibox) + fmcorr
         Utot(ibox + 2) = sum(fx(:,1:N(ibox)) * rs(:,1:N(ibox),ibox)) * bln(ibox)
     else
         
         call vgw0v(rs(:,1:N(1),1)*bln(1), bln(1), (/ beta /), 0d0, Utot(1:1), &
-            fx(:,1:N(1)) )
+            fx(:,1:N(1)), FullMatrixCorrection=fmcorr)
             
+        Utot(1) = Utot(1) + fmcorr
         Utot(3) = sum(fx(:,1:N(1)) * rs(:,1:N(1),1)) * bln(1)
         
         call vgw0v(rs(:,1:N(2),2)*bln(2), bln(2), (/ beta /), 0d0, Utot(2:2), &
-            fx(:,1:N(2)) )
+            fx(:,1:N(2)), FullMatrixCorrection=fmcorr)
             
+        Utot(2) = Utot(2) + fmcorr
         Utot(4) = sum(fx(:,1:N(2)) * rs(:,1:N(2),2)) * bln(2)
     end if
 end function

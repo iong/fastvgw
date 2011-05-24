@@ -1,9 +1,9 @@
-SUBROUTINE vgw0v(Q0, BL_, TAUMAX,TAUI, W, WX)
+SUBROUTINE vgw0v(Q0, BL_, TAUMAX,TAUI, W, WX, FullMatrixCorrection)
     use omp_lib
     IMPLICIT NONE
     REAL*8, intent(in) :: Q0(:,:), TAUMAX(:), TAUI, BL_
     REAL*8, intent(out) :: W(:)
-    real*8, intent(out), optional :: WX(:,:)
+    real*8, intent(out), optional :: WX(:,:), FullMatrixCorrection
     real*8 :: LOGDET
     real*8 :: DT, next_stop
     integer :: i, j, chunk_size
@@ -41,7 +41,7 @@ SUBROUTINE vgw0v(Q0, BL_, TAUMAX,TAUI, W, WX)
     do i=1,size(TAUMAX)
         next_stop = 0.5d0*TAUMAX(i)
         do
-            DT = 1d-4!1d-2*sqrt(T)
+            DT = 1d-2*sqrt(T)
             if (T+DT > next_stop) then
                 DT = next_stop - T
                 T = next_stop
@@ -70,20 +70,27 @@ SUBROUTINE vgw0v(Q0, BL_, TAUMAX,TAUI, W, WX)
     if (present(WX)) then
         WX(:,1:Natom) =  gamak(:,1:Natom) / T
     end if
+    if (present(FullMatrixCorrection)) then
+        FullMatrixCorrection = Ucorrtot
+    end if
 END SUBROUTINE
 
 
-SUBROUTINE vgw0(Q0, BL_, TAUMAX,TAUI, W, WX)
-IMPLICIT NONE
-REAL*8, intent(in) :: Q0(:,:), TAUMAX, TAUI, BL_
-REAL*8, intent(out) :: W
-real*8, intent(out), optional :: WX(:,:)
+SUBROUTINE vgw0(Q0, BL_, TAUMAX,TAUI, W, WX, FullMatrixCorrection)
+    IMPLICIT NONE
+    REAL*8, intent(in) :: Q0(:,:), TAUMAX, TAUI, BL_
+    REAL*8, intent(out) :: W
+    real*8, intent(out), optional :: WX(:,:), FullMatrixCorrection
 
-real*8, dimension(1) :: W_, TAUMAX_
+    real*8, dimension(1) :: W_, TAUMAX_
 
     TAUMAX_(1) = TAUMAX
-    if (present(WX)) then
+    if (present(WX) .and. present(FullMatrixCorrection)) then
+        call vgw0v(Q0, BL_, TAUMAX_, TAUI, W_, WX, FullMatrixCorrection)
+    elseif  (present(WX)) then
         call vgw0v(Q0, BL_, TAUMAX_, TAUI, W_, WX)
+    elseif (present(FullMatrixCorrection)) then
+            call vgw0v(Q0, BL_, TAUMAX_, TAUI, W_, FullMatrixCorrection=FullMatrixCorrection)
     else
         call vgw0v(Q0, BL_, TAUMAX_, TAUI, W_)
     end if

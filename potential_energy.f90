@@ -1,14 +1,14 @@
 subroutine Upot_tau0(Q)
     IMPLICIT NONE
     REAL*8, intent(in) :: Q(:,:)
-    INTEGER  I,J,N
-    real*8 :: rsq,BL2,QIJ(3)
+    INTEGER  I,J,N, k
+    real*8 :: rsq,BL2,QIJ(3), r, f
 
     N = size(Q, 2)
     BL2=BL/2.0
-
 !$OMP SINGLE
         U=0d0
+        Ucorr=0d0
 !$OMP END SINGLE
 !$OMP DO SCHEDULE(DYNAMIC, 32) PRIVATE(I, J, QIJ, RSQ)
     DO I=1,N-1
@@ -16,6 +16,13 @@ subroutine Upot_tau0(Q)
                 qij = Q(:,I) - Q(:,NBIDX(J, I))
                 rsq = sum(min_image(qij, BL)**2)
                 U(tid) = U(tid) + sum(LJC(1:NGAUSS)*EXP(-LJA(1:NGAUSS)*rsq))
+                
+                r = sqrt(rsq)
+                k = int( (r - rcorrmin)/drcorr ) + 1
+                if (k >= Ncorr) cycle
+                
+                f = (r-rcorrmin)/drcorr - k  + 1
+                Ucorr(tid) = Ucorr(tid) + fmcorr(k)*(1-f) + fmcorr(k+1)*f
         ENDDO
     ENDDO
 !$OMP END DO
@@ -27,8 +34,8 @@ subroutine Upot_Ux_tau0(Q)
     IMPLICIT NONE
     REAL*8, intent(in) :: Q(:,:)
     real*8 :: UX0(3), UXI(3), UXJ(3,size(Q,2)), QC(3,size(Q,2))
-    INTEGER :: I,J, N, cnt
-    REAL*8 :: RSQ,QIJ(3), LJC_EXPAV(NGAUSS)
+    INTEGER :: I,J, N, cnt, k
+    REAL*8 :: RSQ,QIJ(3), LJC_EXPAV(NGAUSS), r, f
 
     N = size(Q, 2)
 
@@ -36,6 +43,7 @@ subroutine Upot_Ux_tau0(Q)
 !$OMP SINGLE
         U=0d0
         UPV=0d0
+        Ucorr=0d0
 !$OMP END SINGLE
 !$OMP DO SCHEDULE(DYNAMIC, 32) PRIVATE(I, J, UXI, UX0, UXJ, QC, QIJ, RSQ, LJC_EXPAV, CNT)
     DO I=1,N-1
@@ -50,6 +58,13 @@ subroutine Upot_Ux_tau0(Q)
            UX0 = qij*(2.0*sum(LJA(1:NGAUSS)*LJC_EXPAV))
            UXI = UXI + UX0
            UXJ(:,J) = -UX0
+           
+           r = sqrt(rsq)
+           k = int( (r - rcorrmin)/drcorr ) + 1
+           if (k >= Ncorr) cycle
+           
+           f = (r-rcorrmin)/drcorr - k  + 1
+           Ucorr(tid) = Ucorr(tid) + fmcorr(k)*(1-f) + fmcorr(k+1)*f
         ENDDO
         UPV(:,I,tid) =UXI
         UPV(:,nbidx(1:NNB(I),I),tid) = UPV(:,nbidx(1:NNB(I),I),tid) + UXJ(:,1:NNB(I))

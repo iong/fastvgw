@@ -7,12 +7,13 @@ program dimer
     double precision :: r(3,3), U(4), rmin=2.8, rmax=15, mass=2.0, kT=20.0, RC=30.0
     double precision, allocatable :: Y(:), FX(:,:), InvMeff(:,:,:), &
         SqrtMeff(:,:,:), Ucorr(:)
-    double precision :: LNP, ENRG
+    double precision :: LNP, ENRG, fmcorr
     
     allocate(Y(1+21*Natom), FX(3,Natom), InvMeff(3,3,Natom), &
         SqrtMeff(3,3,Natom), Ucorr(Npts))
     
     call vgwinit(size(r,2), 'pH2-4g', RCUTOFF=RC)
+    call init_fmcorr(1d0/kT)
     write (*,*) 'NOWW =========='
     call vgwfminit(natom, 'pH2-4g', RCUTOFF=RC)
 
@@ -50,7 +51,8 @@ program dimer
         r(1,3) = 0.5d0*r(1,2)
         r(2,3) = sqrt(3d0) * r(1,3)
         
-        call vgw0(r, 100d0, 1d0/kT, 0d0, U(1))
+        call vgw0(r, 100d0, 1d0/kT, 0d0, U(1), FullMatrixCorrection=fmcorr)
+        U(1) = U(1) + fmcorr
         
         call vgwquenchspb(Natom,MASS,r,FX,LNP,U(2),&
                       ENRG,1d0/kT,1d-4,100d0,1d-4,RC,Y, InvMeff,SqrtMeff)
