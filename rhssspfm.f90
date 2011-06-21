@@ -9,13 +9,11 @@ SUBROUTINE RHSSspFM(NEQ, T, Y, YP)!, RPAR, IPAR)
             Zq(3), Z(3,3),Q12(3), UXY0(3,3), UX0(3), TrUXYG
     double precision, pointer :: UG_slab(:,:)
 
-    integer :: job(10), info
+    integer :: job(6) = (/ 1, 1, 1, 0, 0, 1 /), info
     character(6) :: matdescra='GxxFxx'
 
     integer :: tid, nthreads, slicew
     double precision, pointer :: UXYptr(:,:), GUptr(:,:)
-
-    write (*,*) T
 
     ! first call, G=0
     if (y(3*Natom+1)==0d0) then
@@ -104,9 +102,10 @@ SUBROUTINE RHSSspFM(NEQ, T, Y, YP)!, RPAR, IPAR)
         UXYf(3*I1-2 : 3*I1, 3*I1-2 : 3*I1) = UXYdiag(:,:,I1)
     end do
 
+    !call mkl_dcsrbsr(job, Natom, 3, 9, Gcsr, Grja, Gria, Gb, Gbja, Gbia, info)
     !ptrb(1:3*Natom) = Gria(1:3*Natom)
     !ptre(1:3*Natom) = Gria(2:3*Natom+1)
-    !call mkl_dcsrmm('N', 3*Natom, 3*Natom, 3*Natom, 1d0, matdescra, Gcsr, Grja, &
+    !call mkl_dbsrmm('N', 3*Natom, 3*Natom, 3*Natom, 1d0, matdescra, Gcsr, Grja, &
     !    ptrb, ptre, UXYf, 3*Natom, 0d0, GU, 3*Natom)
 
     ptrb(1:Natom) = Gbia(1:Natom)
@@ -120,7 +119,7 @@ SUBROUTINE RHSSspFM(NEQ, T, Y, YP)!, RPAR, IPAR)
 !        GUptr => GU(:,tid*slicew : 3*Natom)
 !    else
 !        UXYptr => UXYf(:,tid*slicew : (tid+1)*slicew)
-!        GUptr => GU(:,tid*slicew : (tid+1)*slicew)
+      !  GUptr => GU(:,tid*slicew : (tid+1)*slicew)
 !    end if
 !    write (*,*) tid, nthreads, slicew, size(GUptr, 2)
 !    call mkl_dbsrmm('N', Natom, size(UXYptr, 2), Natom, 3, 1d0, &
@@ -132,21 +131,8 @@ SUBROUTINE RHSSspFM(NEQ, T, Y, YP)!, RPAR, IPAR)
         matdescra, Gb, Gbja, &
         ptrb, ptre, UXYf, n3rows16, 0d0, GU, n3rows16)
 
-    job(1:6) = (/ 1, 1, 1, 0, 0, 1 /)
-    call mkl_dcsrbsr(job, Natom, 3, 9, Gcsr, Grja, Gria, Gb, Gbja, Gbia, info)
-    call mmcsrsym(3*Natom, 3*Natom, 3*Natom, GU, Gcsr, Gria, Grja, GPcsr)
-    GPcsr = -GPcsr
-
-    !job(1:6) = (/ 0, 1, 1, 0, 0, 1 /)
-   ! write(*,*) Gbja(1:nnzb), 'c'
-   ! call mkl_dcsrbsr(job, 3*Natom, 3, 9, GPcsr, Grja, Gria, GPb, Gbja, Gbia, info)
-   ! write(*,*) Gbja(1:nnzb)
-
-
-
     UG(1:3*Natom, :) = transpose(GU(1:3*Natom, :))
 
-    GPb = 0
     do I1=1,Natom
         ptrb(1) = 1
         ptre(1) = Gbia(I1+1) - Gbia(I1) + 1
@@ -158,24 +144,17 @@ SUBROUTINE RHSSspFM(NEQ, T, Y, YP)!, RPAR, IPAR)
                 ptrb, ptre, UG_slab, n3rows16, 0d0, &
                 GPb(:,:,J2), 3)
         end do
-    end do
-    call bsr_copy_up_lo(Gbia, Gbja, GPb)
-
-    call mkl_dcsrbsr(job, Natom, 3, 9, Gcsr, Grja, Gria, Gpb, Gbja, Gbia, info)
-    write (*,*) 'x', maxloc(abs(Gcsr(1:9*nnzb) - GPcsr(1:9*nnzb)))
-    !call mkl_dcsrbsr(job, 3*Natom, 3, 9, GPcsr, Grja, Gria, GPb, Gbja, Gbia, info)
-
         
-    do I1=1,Natom
         do k=1,3
             GPb(k,k,FMDIAG(I1)) = GPb(k,k,FMDIAG(I1)) + invmass
         end do
         
     end do
+    call bsr_copy_up_lo(Gbia, Gbja, GPb)
 
     TrUXYG = 0d0
     do I1=1,3*Natom
-        TrUXYG = TrUXYG + GU(I1,I1)
+        TrUXYG = TrUXYG + UG(I1,I1)
     end do
 
     call mkl_dbsrgemv('N', Natom, 3, Gb, Gbia, Gbja, UX, QP)
@@ -285,31 +264,6 @@ subroutine bsrdense(x, ia, ja, A)
             j = ja(jit)
             
             A(mblk*(i-1) + 1 : mblk*i, mblk*(j-1) + 1 : mblk*j) = x(:,:,jit)
-        end do
-    end do
-end subroutine
-
-subroutine mmcsrsym(nrowsA, ncolsC, nrowsB, A, B, ia, ja, C)
-    implicit none
-    integer, intent(in) :: nrowsA, ncolsC, nrowsB, ia(:), ja(:)
-    double precision, intent(in) :: A(:,:), B(:)
-    double precision, intent(out) :: C(:)
-    integer :: i, j, k, p, k_j_p
-
-    double precision :: x(size(A, 1))
-    C = 0d0
-    do k=1,nrowsB
-        do k_j_p=ia(k), ia(k+1)-1
-            j = ja(k_j_p)
-            !do i=1,nrowsA
-                !c(i,j) = c(i, j) + a(i, k) * b(k, j)
-            !end do
-            x = a(:,k)*b(k_j_p)
-
-
-            do p=ia(j),ia(j+1)-1
-                c(p) = c(p) + x(ja(p))
-            end do
         end do
     end do
 end subroutine
