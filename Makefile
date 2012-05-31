@@ -25,7 +25,8 @@ FFLAGS += $(OPTFLAGS)
 CFLAGS += $(OPTFLAGS)
 LDFLAGS += $(OPTFLAGS)
 
-LIBS += -lcholmod -lamd -lcamd -lcolamd -lccolamd $(LAPACK)
+CHOLMOD:= $(addsuffix .a,$(addprefix /usr/local/intel-12.1/lib/lib,cholmod amd camd colamd ccolamd))
+LIBS += $(CHOLMOD) $(LAPACK)
 
 pimc:=utils.f90 pairint.f90 pimc.f90
 pimcsc:=utils.f90 pimcsc.f90

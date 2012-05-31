@@ -14,8 +14,8 @@ OPTFLAGS += -heap-arrays
 DBGFLAGS:=-O0 -g 
 FDBG:=-fpe0 -traceback -check all -ftrapuv -warn unused
 FFLAGS:=
-LDFLAGS += -L/opt/hpc//intel-2011/lib
-CPPFLAGS += -I/opt/hpc//intel-2011/include
+#CPPFLAGS += -I/opt/local/include/ufsparse
+CPPFLAGS += -I/usr/include/suitesparse
 
 LAPACK := -mkl=parallel
-LIBS += -lcholmod -lamd -lcamd -lcolamd -lccolamd
+#LIBS += -lcholmod -lamd -lcamd -lcolamd -lccolamd
